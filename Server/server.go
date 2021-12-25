@@ -10,5 +10,6 @@ func main() {
 	// Get and check port no given as terminal argument
 	connPortNo, err := cli_parser.Parse()
 	error_handler.CheckFatalError(err)
+	// Start dealing with requests
 	network.AcceptConnection(connPortNo)
 }

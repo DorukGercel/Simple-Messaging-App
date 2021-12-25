@@ -13,8 +13,9 @@ import (
 
 const server = "Server"
 
+// AcceptConnection starts the server and starts new routine for incoming requests
 func AcceptConnection(connPortNo string) {
-	// Listen for incoming connections.
+	// Listen for incoming connections
 	l, err := net.Listen(definitions.ConnType, definitions.ConnHost+":"+connPortNo)
 	error_handler.CheckFatalError(err)
 	// Close the listener when the application closes.
@@ -23,57 +24,55 @@ func AcceptConnection(connPortNo string) {
 	// Init connections map
 	connMap := map[string]net.Conn{}
 	for {
-		// Listen for an incoming connection.
+		// Listen for an incoming connection
 		conn, err := l.Accept()
 		error_handler.CheckFatalError(err)
-		fmt.Println("New Conn")
-		go HandleRequest(conn, connMap)
+		go handleRequest(conn, connMap)
 	}
 }
 
-// HandleRequest Handles incoming requests.
-func HandleRequest(currentConn net.Conn, connMap map[string]net.Conn) {
+// Handles incoming requests
+func handleRequest(currentConn net.Conn, connMap map[string]net.Conn) {
+	// User nick of the connection
 	var currentUserNick string
 	for {
+		// Wait for request
 		req, err := bufio.NewReader(currentConn).ReadString(definitions.MsgEndChar)
 		if err != nil {
+			// If client closes connection shut down
 			handleClientShutdown(currentUserNick, connMap)
 			break
 		}
-		req = req[:len(req)-1]
+		// Format request
+		req = formatUserReq(req)
+		// Get the opp code and payload of request
 		oppCode, msg := definitions.GetMsgOppCodeAndMessage(req)
 		if oppCode == definitions.InitConn {
-			currentUserNick, err = initConn(msg, currentConn, connMap)
-			if err != nil {
-				fmt.Println(err)
+			// Deal init conn req
+			if currentUserNick, err = sendInitConn(msg, currentConn, connMap); err != nil {
+				// If error occurred break connection
 				break
 			}
-			fmt.Fprintf(currentConn, formMsg(server, formTextForList(getUsersList(connMap))))
 		} else if oppCode == definitions.SendMsg {
+			// Deal send message to other user request
 			sendMessage(msg, currentUserNick, currentConn, connMap)
 		} else if oppCode == definitions.QueryMsg {
-			var records []string
-			queryOppCode, queryLimit := definitions.GetQueryOppCode(msg)
-			if queryOppCode == definitions.ToMeMsg {
-				records = db_handler.ExecQuery(currentUserNick, db_handler.TO, queryLimit)
-			} else {
-				records = db_handler.ExecQuery(currentUserNick, db_handler.FROM, queryLimit)
-			}
-			fmt.Fprintf(currentConn, formMsg(server, formTextForList(records)))
+			// Deal query req
+			sendQueryResponse(msg, currentUserNick, currentConn)
 		}
 	}
 	currentConn.Close()
 }
 
-func initConn(msg string, currentConn net.Conn, connMap map[string]net.Conn) (string, error) {
-	fmt.Println("Name: " + msg)
-	if _, ok := connMap[msg]; !ok {
-		currentUserNick := msg
-		connMap[currentUserNick] = currentConn
-		return currentUserNick, nil
+func sendInitConn(msg string, currentConn net.Conn, connMap map[string]net.Conn) (currentUserNick string, err error) {
+	currentUserNick, err = initConn(msg, currentConn, connMap)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
 	}
-	fmt.Println("User already exists")
-	return "", errors.New(definitions.ErrUexists)
+	// Send users list
+	fmt.Fprintf(currentConn, formMsg(server, formTextForList(getUsersList(connMap))))
+	return currentUserNick, nil
 }
 
 func sendMessage(msg string, currentUserNick string, currentConn net.Conn, connMap map[string]net.Conn) {
@@ -94,12 +93,40 @@ func sendMessage(msg string, currentUserNick string, currentConn net.Conn, connM
 	}
 }
 
+func sendQueryResponse(msg string, currentUserNick string, currentConn net.Conn) {
+	records := matchExecuteQuery(currentUserNick, msg)
+	fmt.Fprintf(currentConn, formMsg(server, formTextForList(records)))
+}
+
+func initConn(msg string, currentConn net.Conn, connMap map[string]net.Conn) (string, error) {
+	fmt.Println("Name: " + msg)
+	if _, ok := connMap[msg]; !ok {
+		currentUserNick := msg
+		connMap[currentUserNick] = currentConn
+		return currentUserNick, nil
+	}
+	fmt.Println("User already exists")
+	return "", errors.New(definitions.ErrUexists)
+}
+
 func getUsersList(connMap map[string]net.Conn) []string {
 	var list []string
 	for key := range connMap {
 		list = append(list, key)
 	}
 	return list
+}
+
+func matchExecuteQuery(currentUserNick string, msg string) []string {
+	var records []string
+	queryOppCode, queryLimit := definitions.GetQueryOppCode(msg)
+	if queryOppCode == definitions.ToMeMsg {
+		// Check direction of query
+		records = db_handler.ExecQuery(currentUserNick, db_handler.TO, queryLimit)
+	} else {
+		records = db_handler.ExecQuery(currentUserNick, db_handler.FROM, queryLimit)
+	}
+	return records
 }
 
 func formMsg(sender string, msg string) string {
@@ -127,6 +154,11 @@ func getSendUserAndMsg(msgSlice []string) (sentUserNick string, chatMsg string) 
 	sentUserNick = msgSlice[0][0:len(msgSlice[0])]
 	chatMsg = msgSlice[1]
 	return
+}
+
+func formatUserReq(req string) string {
+	fmt.Println(req[:len(req)-1])
+	return req[:len(req)-1]
 }
 
 func formTextForList(list []string) string {
