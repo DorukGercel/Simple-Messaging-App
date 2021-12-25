@@ -99,7 +99,7 @@ func sendQueryResponse(msg string, currentUserNick string, currentConn net.Conn)
 }
 
 func initConn(msg string, currentConn net.Conn, connMap map[string]net.Conn) (string, error) {
-	fmt.Println("Name: " + msg)
+	fmt.Println("Name: " + msg + " joined!")
 	if _, ok := connMap[msg]; !ok {
 		currentUserNick := msg
 		connMap[currentUserNick] = currentConn
@@ -157,7 +157,6 @@ func getSendUserAndMsg(msgSlice []string) (sentUserNick string, chatMsg string) 
 }
 
 func formatUserReq(req string) string {
-	fmt.Println(req[:len(req)-1])
 	return req[:len(req)-1]
 }
 
