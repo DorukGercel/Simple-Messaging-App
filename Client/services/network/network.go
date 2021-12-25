@@ -17,14 +17,15 @@ const (
 	badMsgForm = "Bad message format!"
 )
 
+// InitConnection start the connection with the server
 func InitConnection(nickname string, conn net.Conn) {
 	fmt.Fprintf(conn, formInitMessage(nickname))
 	msg, _ := bufio.NewReader(conn).ReadString(definitions.MsgEndChar)
-	msg = msg[:len(msg)-1]
+	msg = formatResp(msg)
 	readMessage(msg, list)
 }
 
-// ListenServer Handles incoming messages.
+// ListenServer Handles incoming messages from server
 func ListenServer(conn net.Conn) {
 	for {
 		msg, err := bufio.NewReader(conn).ReadString(definitions.MsgEndChar)
@@ -32,7 +33,7 @@ func ListenServer(conn net.Conn) {
 			handleServerShutdown()
 			break
 		}
-		msg = msg[:len(msg)-1]
+		msg = formatResp(msg)
 		readMessage(msg, incoming)
 		fmt.Print(typesmt)
 	}
@@ -40,11 +41,13 @@ func ListenServer(conn net.Conn) {
 	os.Exit(0)
 }
 
+// SendMessage send any message to the server
 func SendMessage(conn net.Conn, nickname string) {
 	fmt.Print(typesmt)
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		text, _ := reader.ReadString('\n')
+		// Format client input
 		text = formatInput(text)
 		if isValidMsg(text) {
 			if isValidQueryReq(text) {
@@ -90,13 +93,23 @@ func isValidQueryReq(text string) bool {
 	if !isFromMeQueryReq(text) && !isToMeQueryReq(text) {
 		return false
 	}
-	if len(text) == len(definitions.QueryStrWLim) {
-		textSlice := strings.Split(text, " ")
-		if !containsLimitValue(textSlice) {
+	if len(text) == len(definitions.QueryStrWoutLim) {
+		// If no limit value pre-tests were enough
+		return true
+	} else if len(text) >= len(definitions.QueryStrWLim) {
+		// If len indicates limit value exists
+		if !checkLimitDelimeter(text) {
+			// Check if delimiters are in correct place
 			return false
 		}
+		textSlice := strings.Split(text, " ")
+		if !containsLimitValue(textSlice) {
+			// Check limit value is number
+			return false
+		}
+		return true
 	}
-	return true
+	return false
 }
 
 func isFromMeQueryReq(text string) bool {
@@ -116,13 +129,16 @@ func isToMeQueryReq(text string) bool {
 func containsLimitValue(textSlice []string) bool {
 	if len(textSlice) == 3 {
 		val, err := strconv.Atoi(textSlice[2])
-		if err != nil {
-			fmt.Println(val, err)
+		if err != nil || val < 0 {
 			return false
 		}
 		return true
 	}
 	return false
+}
+
+func checkLimitDelimeter(text string) bool {
+	return text[1] == ' ' && text[3] == ' '
 }
 
 func formInitMessage(nickname string) string {
@@ -183,6 +199,10 @@ func readListMessage(msg string, clientExtra string) {
 func printInputError(warning string) {
 	fmt.Println(warning + "\n")
 	fmt.Print(typesmt)
+}
+
+func formatResp(resp string) string {
+	return resp[:len(resp)-1]
 }
 
 func formatInput(text string) string {

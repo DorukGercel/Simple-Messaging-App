@@ -12,9 +12,11 @@ func main() {
 	// Get and check nickname, ip addr, port no given as terminal argument
 	nickname, ipAddr, portNo, err := cli_parser.Parse()
 	error_handler.CheckFatalError(err)
+	// Start connections
 	conn, err := net.Dial(definitions.ConnType, ipAddr+":"+portNo)
 	error_handler.CheckFatalError(err)
 	network.InitConnection(nickname, conn)
+	// Listen in separate routine
 	go network.ListenServer(conn)
 	network.SendMessage(conn, nickname)
 }
